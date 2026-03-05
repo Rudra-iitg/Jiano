@@ -101,11 +101,6 @@ final class GeminiProvider: AIProvider, @unchecked Sendable {
             throw AIProviderError.invalidResponse(provider: displayName, detail: "Could not parse response")
         }
 
-        var tokenCount: Int?
-        if let usageMetadata = json["usageMetadata"] as? [String: Any] {
-            tokenCount = usageMetadata["totalTokenCount"] as? Int
-        }
-
         // Gemini API might provide usage metadata, but for now we'll use placeholder
         // TODO: Parse usageMetadata from Gemini response if available
         

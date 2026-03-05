@@ -3,6 +3,11 @@ import SwiftData
 
 @main
 struct OpusNativeApp: App {
+    /// Whether we're running inside XCTest (test host mode)
+    static let isRunningTests: Bool = {
+        NSClassFromString("XCTestCase") != nil
+    }()
+
     /// Optional model container — nil if creation failed
     let sharedModelContainer: ModelContainer?
     /// Error message if model container creation failed
@@ -11,6 +16,14 @@ struct OpusNativeApp: App {
     @State private var diContainer = AppDIContainer()
 
     init() {
+        // When launched as a test host, skip heavy SwiftData initialization
+        // to prevent crashes in the test runner
+        guard !Self.isRunningTests else {
+            self.sharedModelContainer = nil
+            self.containerError = "Running in test mode"
+            return
+        }
+
         let schema = Schema([
             Conversation.self,
             ChatMessage.self,

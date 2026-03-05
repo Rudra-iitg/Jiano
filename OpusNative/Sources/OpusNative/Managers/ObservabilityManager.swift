@@ -39,6 +39,10 @@ final class ObservabilityManager {
     private let logsFileURL: URL
     private var saveTask: Task<Void, Never>?
 
+    deinit {
+        saveTask?.cancel()
+    }
+
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("OpusNative", isDirectory: true)

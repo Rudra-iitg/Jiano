@@ -12,6 +12,11 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
+*.xcarchive
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+xcuserdata/
 
 # Swift Package Manager
 .build/
@@ -34,6 +39,12 @@ Package.resolved
 .idea/
 .vscode/
 
-# Misc
+# Build Logs
+build_log*.txt
 *.log
+
+# CI/CD
+.act/
+
+# Misc
 generate_icon.py

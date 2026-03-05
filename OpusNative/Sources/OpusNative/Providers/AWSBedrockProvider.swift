@@ -50,7 +50,7 @@ final class AWSBedrockProvider: AIProvider, @unchecked Sendable {
 
         // Parse usage if available (Bedrock format varies by model, tricky to standardize here without model specifics)
         // For now, minimal implementation
-        var stopReason: String? = "stop" // Default to "stop" as per original logic
+        let stopReason: String? = "stop" // Default to "stop" as per original logic
 
         return AIResponse(
             content: fullContent,

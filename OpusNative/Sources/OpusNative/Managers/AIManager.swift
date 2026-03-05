@@ -55,6 +55,11 @@ final class AIManager {
 
         // Plugin loading is now handled by AppDIContainer after all dependencies are set up
     }
+    
+    deinit {
+        // We do not have single saved task, but any unstructured tasks like Task { await fetchOllamaModels() }
+        // should ideally be tracked. Since it's a one-off fetch, it usually finishes quickly.
+    }
 
     // MARK: - Provider Registration
 

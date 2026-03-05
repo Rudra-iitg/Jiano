@@ -237,7 +237,7 @@ final class CompareViewModel {
                 let providerName = entry.providerName
                 let modelName = entry.modelName
 
-                group.addTask {
+                group.addTask { [settings] in
                     let startTime = CFAbsoluteTimeGetCurrent()
                     do {
                         let response = try await self.diContainer.requestQueue.execute(providerID: providerID) {

@@ -37,7 +37,7 @@ struct GenericAPIProvider: AIProvider, Sendable {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         // Build request based on format
-        let (request, body) = try buildRequest(
+        let (request, _) = try buildRequest(
             message: message,
             conversation: conversation,
             settings: settings,

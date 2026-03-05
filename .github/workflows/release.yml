@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  archive-and-release:
+    name: Archive & Release
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project OpusNative.xcodeproj \
+            -scheme OpusNative \
+            -configuration Release \
+            -archivePath ./build/OpusNative.xcarchive \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Compress Archive
+        run: |
+          cd build
+          zip -r OpusNative.xcarchive.zip OpusNative.xcarchive
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/OpusNative.xcarchive.zip
+          generate_release_notes: true

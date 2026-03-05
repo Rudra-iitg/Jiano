@@ -22,8 +22,8 @@ struct VectorSearchResult: Identifiable {
 }
 
 // MARK: - Binary format metadata (stored in vectors.meta.json)
-private struct VectorMeta: Codable {
-    struct Entry: Codable {
+private struct VectorMeta: Codable, Sendable {
+    struct Entry: Codable, Sendable {
         let id: UUID
         let text: String
         let metadata: [String: String]

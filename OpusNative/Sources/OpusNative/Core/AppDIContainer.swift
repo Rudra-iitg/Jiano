@@ -48,6 +48,9 @@ final class AppDIContainer {
         self.s3BackupManager.aiManager = aiManager
         self.aiManager.pluginManager = self.pluginManager
         
+        // Skip plugin loading during unit tests to prevent crashes
+        guard NSClassFromString("XCTestCase") == nil else { return }
+        
         // Start plugin loading now that DI is wired up
         Task { @MainActor in
             self.pluginManager.loadPlugins()

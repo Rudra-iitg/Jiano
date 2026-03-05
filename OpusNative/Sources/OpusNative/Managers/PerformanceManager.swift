@@ -18,17 +18,23 @@ final class PerformanceManager {
     private(set) var animationDuration: Double = 0.3
     private(set) var reduceTranslucency: Bool = false
     
+    private var thermalTask: Task<Void, Never>?
+    
     init() {
         self.isPerformanceModeEnabled = UserDefaults.standard.bool(forKey: "isPerformanceModeEnabled")
         
         // Listen for thermal state
-        Task {
+        thermalTask = Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: ProcessInfo.thermalStateDidChangeNotification) {
-                await checkThermalState()
+                self?.checkThermalState()
             }
         }
         
         updateConfiguration()
+    }
+    
+    deinit {
+        thermalTask?.cancel()
     }
     
     @MainActor

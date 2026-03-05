@@ -26,7 +26,7 @@ struct EmbeddingAnalyticsEngine: Sendable {
     }
     
     /// Calculates Euclidean Distance between two vectors.
-    static func euclideanDistance(_ v1: [Double], _ v2: [Double]) -> Double {
+    nonisolated static func euclideanDistance(_ v1: [Double], _ v2: [Double]) -> Double {
         guard v1.count == v2.count else { return Double.infinity }
         
         var sum = 0.0

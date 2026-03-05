@@ -13,6 +13,8 @@ struct TSNEEngine: Sendable {
         var momentum: Double = 0.5
         var finalMomentum: Double = 0.8
         var momentumSwitchIter: Int = 250
+        
+        nonisolated init() {}
     }
     
     /// Performs dimensionality reduction using t-SNE.
