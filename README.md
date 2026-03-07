@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="OpusNative/Sources/OpusNative/Assets.xcassets/AppIcon.appiconset/icon_256x256@2x.png" width="128" height="128" alt="OpusNative Icon" />
+  <img src="assets/logo.png" width="256" height="256" alt="OpusNative Logo" />
 </p>
 
 <h1 align="center">OpusNative</h1>

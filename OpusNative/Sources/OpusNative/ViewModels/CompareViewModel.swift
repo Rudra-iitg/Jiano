@@ -221,6 +221,7 @@ final class CompareViewModel {
             let content: String
             let latencyMs: Double
             let tokenCount: Int?
+            let aiResponse: AIResponse?
             let error: String?
         }
 
@@ -257,6 +258,7 @@ final class CompareViewModel {
                             content: responseContent,
                             latencyMs: latency,
                             tokenCount: responseTokenCount,
+                            aiResponse: response,
                             error: nil
                         )
                     } catch {
@@ -268,6 +270,7 @@ final class CompareViewModel {
                             content: "",
                             latencyMs: latency,
                             tokenCount: nil,
+                            aiResponse: nil,
                             error: error.localizedDescription
                         )
                     }
@@ -292,6 +295,35 @@ final class CompareViewModel {
                 error: raw.error,
                 rank: index + 1
             )
+        }
+        
+        // Track usage and persist ComparisonSession
+        let session = ComparisonSession(prompt: text)
+        var persisitedResults: [ComparisonResult] = []
+        
+        for raw in rawResults {
+            if let response = raw.aiResponse {
+                diContainer.usageManager.track(response: response, providerID: raw.providerID, modelContext: modelContext)
+                
+                let cost = diContainer.usageManager.calculateCost(input: response.inputTokenCount ?? 0, output: response.outputTokenCount ?? 0, model: response.model)
+                let cResult = ComparisonResult(
+                    providerID: raw.providerID,
+                    modelID: response.model,
+                    response: response.content,
+                    tokenCount: response.tokenCount,
+                    latencyMs: raw.latencyMs,
+                    costUSD: Double(truncating: cost as NSNumber),
+                    rank: rawResults.firstIndex(where: { $0.providerID == raw.providerID })! + 1
+                )
+                cResult.session = session
+                persisitedResults.append(cResult)
+            }
+        }
+        
+        session.results = persisitedResults
+        if let mc = modelContext, !persisitedResults.isEmpty {
+            mc.insert(session)
+            try? mc.save()
         }
 
         isComparing = false

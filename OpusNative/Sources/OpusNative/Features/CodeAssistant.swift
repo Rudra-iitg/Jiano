@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // MARK: - Code Assistant
 
@@ -185,7 +186,7 @@ final class CodeAssistant {
 
     // MARK: - Execute Action
 
-    func execute(action: CodeAction) async {
+    func execute(action: CodeAction, modelContext: ModelContext) async {
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Please paste some code first."
             return
@@ -223,7 +224,24 @@ final class CodeAssistant {
             result = response.content
             
             // Track usage
-            diContainer.usageManager.track(response: response)
+            diContainer.usageManager.track(response: response, providerID: provider.id, modelContext: modelContext)
+            
+            // Save Session to DB
+            let session = CodeSession(
+                originalCode: code,
+                language: detectedLanguage,
+                action: action.rawValue,
+                aiResponse: response.content,
+                providerID: provider.id,
+                modelID: settings.modelName,
+                createdAt: Date()
+            )
+            modelContext.insert(session)
+            do {
+                try modelContext.save()
+            } catch {
+                print("Failed to save CodeSession to SwiftData: \(error)")
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

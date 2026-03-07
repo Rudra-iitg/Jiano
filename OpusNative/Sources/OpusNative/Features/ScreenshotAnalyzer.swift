@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftData
 import ScreenCaptureKit
 
 // MARK: - Screenshot Analyzer
@@ -58,7 +59,7 @@ final class ScreenshotAnalyzer {
     }
 
     /// Analyze the captured screenshot using a vision-capable provider
-    func analyzeScreenshot(prompt: String = "Describe what you see in this screenshot in detail.") async {
+    func analyzeScreenshot(prompt: String = "Describe what you see in this screenshot in detail.", modelContext: SwiftData.ModelContext? = nil) async {
         guard let image = capturedImage else {
             errorMessage = "No screenshot captured. Capture a screenshot first."
             return
@@ -94,13 +95,19 @@ final class ScreenshotAnalyzer {
             let response = try await provider.sendMessage(imagePrompt, conversation: [], settings: settings)
             analysisResult = response.content
 
-            // Persist for S3 backup
-            diContainer.s3BackupManager.saveToolAnalysis(
-                type: "screenshot",
-                title: "Screen Capture",
-                content: response.content,
-                toKey: "screenshotAnalysisHistory"
-            )
+            // Persist as ToolAnalysis SwiftData model
+            if let context = modelContext {
+                let analysis = ToolAnalysis(
+                    type: "screenshot",
+                    title: "Screen Capture",
+                    content: response.content,
+                    providerID: provider.id,
+                    modelName: settings.modelName,
+                    base64Image: pngData.base64EncodedString()
+                )
+                context.insert(analysis)
+                try? context.save()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

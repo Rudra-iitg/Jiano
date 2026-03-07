@@ -1,10 +1,24 @@
 import SwiftUI
 
+enum HFModelValidationStatus {
+    case none
+    case loading
+    case valid
+    case warning(String)
+    case invalid
+}
 struct SettingsProvidersTab: View {
     @Bindable var viewModel: SettingsViewModel
     let accentColor: Color
     
     @State private var showingOpenRouterModels = false
+    
+    // HuggingFace
+    @State private var showingHuggingFacePicker = false
+    @State private var customHFModelInput = ""
+    @State private var hfModelValidationStatus: HFModelValidationStatus = .none
+    
+    @AppStorage("huggingface_selected_model") private var hfSelectedModel: String = "mistralai/Mistral-7B-Instruct-v0.3"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -21,7 +35,71 @@ struct SettingsProvidersTab: View {
             }
 
             SettingsCardView(title: "HuggingFace", icon: "text.magnifyingglass", accentColor: accentColor) {
-                SettingsSecureFieldView(label: "Access Token", text: $viewModel.huggingfaceToken)
+                VStack(alignment: .leading, spacing: 12) {
+                    SettingsSecureFieldView(label: "Access Token", text: $viewModel.huggingfaceToken)
+                    
+                    Divider().background(Color.white.opacity(0.1))
+                    
+                    Button {
+                        showingHuggingFacePicker = true
+                    } label: {
+                        HStack {
+                            Text("Model")
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Text(hfSelectedModel)
+                                .foregroundStyle(.gray)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.gray)
+                        }
+                        .padding()
+                        .background(Color.black.opacity(0.2))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Or enter model ID:")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
+                        
+                        TextField("e.g. google/flan-t5-xxl", text: $customHFModelInput)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                validateCustomHFModel()
+                            }
+                        
+                        HStack {
+                            switch hfModelValidationStatus {
+                            case .none: EmptyView()
+                            case .loading: 
+                                ProgressView().controlSize(.small)
+                                Text("Validating...").font(.caption).foregroundStyle(.gray)
+                            case .valid:
+                                Text("✅ Model found and accessible").font(.caption).foregroundStyle(.green)
+                            case .warning(let msg):
+                                Text("⚠️ \(msg)").font(.caption).foregroundStyle(.yellow)
+                            case .invalid:
+                                Text("❌ Model not found — check the ID").font(.caption).foregroundStyle(.red)
+                            }
+                            
+                            Spacer()
+                            
+                            if !customHFModelInput.isEmpty {
+                                Link("Open on HuggingFace ↗", destination: URL(string: "https://huggingface.co/\(customHFModelInput)") ?? URL(string: "https://huggingface.co")!)
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    
+                    Text("Browse 300,000+ models at huggingface.co. Only models with Inference API support will work without self-hosting.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.top, 4)
+                }
             }
 
             SettingsCardView(title: "Google Gemini", icon: "sparkles", accentColor: accentColor) {
@@ -156,6 +234,42 @@ struct SettingsProvidersTab: View {
                 // Currently settings just holds provider credentials. 
                 // AIManager active settings configures the current model.
                 // We'll just let them browse for now, real model selection happens in SettingsModelTab.
+            }
+        }
+        .sheet(isPresented: $showingHuggingFacePicker) {
+            HuggingFaceModelPickerView(apiKey: viewModel.huggingfaceToken) { selectedId in
+                hfSelectedModel = selectedId
+                customHFModelInput = selectedId
+                hfModelValidationStatus = .valid
+            }
+        }
+    }
+
+    // MARK: - Validation
+    
+    private func validateCustomHFModel() {
+        let input = customHFModelInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else {
+            hfModelValidationStatus = .none
+            return
+        }
+        
+        hfModelValidationStatus = .loading
+        
+        Task {
+            do {
+                let isValid = try await HuggingFaceModelService.shared.validateModel(modelId: input, apiKey: viewModel.huggingfaceToken)
+                if isValid {
+                    hfModelValidationStatus = .valid
+                    hfSelectedModel = input
+                    UserDefaults.standard.set(input, forKey: "huggingface_selected_model")
+                } else {
+                    hfModelValidationStatus = .invalid
+                }
+            } catch {
+                hfModelValidationStatus = .warning("Model exists but may not support Inference API")
+                hfSelectedModel = input 
+                UserDefaults.standard.set(input, forKey: "huggingface_selected_model")
             }
         }
     }

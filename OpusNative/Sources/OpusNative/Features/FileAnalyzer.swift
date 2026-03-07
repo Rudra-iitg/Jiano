@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftData
 import UniformTypeIdentifiers
 
 // MARK: - File Analyzer
@@ -63,7 +64,7 @@ final class FileAnalyzer {
     }
 
     /// Analyze the given file content using the active provider
-    func analyzeFile(content: String, fileName: String, isImage: Bool) async {
+    func analyzeFile(content: String, fileName: String, isImage: Bool, modelContext: SwiftData.ModelContext? = nil) async {
         guard let provider = diContainer.aiManager.activeProvider else {
             errorMessage = "No active provider configured."
             return
@@ -103,13 +104,19 @@ final class FileAnalyzer {
             let response = try await provider.sendMessage(prompt, conversation: [], settings: settings)
             analysisResult = response.content
 
-            // Persist for S3 backup
-            diContainer.s3BackupManager.saveToolAnalysis(
-                type: "file",
-                title: fileName,
-                content: response.content,
-                toKey: "fileAnalysisHistory"
-            )
+            // Persist as ToolAnalysis SwiftData model
+            if let context = modelContext {
+                let analysis = ToolAnalysis(
+                    type: "file",
+                    title: fileName,
+                    content: response.content,
+                    providerID: provider.id,
+                    modelName: settings.modelName,
+                    base64Image: isImage ? content : nil
+                )
+                context.insert(analysis)
+                try? context.save()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

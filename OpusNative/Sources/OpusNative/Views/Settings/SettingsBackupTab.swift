@@ -5,6 +5,8 @@ struct SettingsBackupTab: View {
     @Bindable var viewModel: SettingsViewModel
     @Bindable var s3BackupManager: S3BackupManager
     let accentColor: Color
+    
+    @State private var showBackupBrowser = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -131,23 +133,16 @@ struct SettingsBackupTab: View {
             // Restore Card
             SettingsCardView(title: "Restore from S3", icon: "icloud.and.arrow.down", accentColor: accentColor) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Download and merge a backup from a specific date. Existing conversations are preserved — only new data is added.")
+                    Text("Browse cloud backups and selectively restore specific data.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.4))
 
                     Button {
-                        Task { await s3BackupManager.listBackupDates() }
+                        showBackupBrowser = true
                     } label: {
                         HStack {
-                            if s3BackupManager.isListingBackups {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .scaleEffect(0.6)
-                                Text("Loading...")
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                                Text("Load Available Backups")
-                            }
+                            Image(systemName: "magnifyingglass")
+                            Text("Browse & Restore Backups")
                         }
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.white)
@@ -156,79 +151,11 @@ struct SettingsBackupTab: View {
                         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.08)))
                     }
                     .buttonStyle(.plain)
-                    .disabled(!s3BackupManager.isConfigured || s3BackupManager.isListingBackups)
-
-                    if !s3BackupManager.availableBackups.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Available Backups")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.6))
-
-                            ForEach(s3BackupManager.availableBackups) { backup in
-                                HStack {
-                                    Image(systemName: "clock.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(accentColor)
-                                    Text(backup.displayDate)
-                                        .font(.callout)
-                                    Spacer()
-
-                                    Button {
-                                        Task {
-                                            if let context = viewModel.modelContext {
-                                                await s3BackupManager.restore(date: backup.date, modelContext: context)
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "arrow.down.circle.fill")
-                                            Text("Restore")
-                                        }
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 5)
-                                        .background(Capsule().fill(accentColor.opacity(0.6)))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.white.opacity(0.03))
-                                )
-                            }
-                        }
-                    }
-
-                    if s3BackupManager.isRestoring {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ProgressView(value: s3BackupManager.progress)
-                                .tint(.green)
-                            Text(s3BackupManager.statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
-                        }
-                    }
-
-                    if let error = s3BackupManager.errorMessage {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(.red.opacity(0.8))
-                        }
-                    }
-
-                    if !s3BackupManager.isRestoring,
-                       s3BackupManager.statusMessage.contains("Restored") {
-                        Text(s3BackupManager.statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
+                    .disabled(!s3BackupManager.isConfigured)
                 }
+            }
+            .sheet(isPresented: $showBackupBrowser) {
+                BackupBrowserView()
             }
 
             HStack(spacing: 8) {

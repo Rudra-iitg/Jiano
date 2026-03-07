@@ -29,12 +29,15 @@ struct ChatView: View {
             // Provider & Model toolbar
             ChatProviderToolbarView(aiManager: aiManager, performanceManager: performanceManager)
             
-            // Phase 2: Context Bar
-            ContextUsageBar(
-                usage: chatVM.contextUsage,
-                limit: chatVM.contextLimit,
-                percentage: chatVM.contextPercentage
-            )
+            // Context bar — only visible when conversation has usage
+            if chatVM.contextPercentage > 0 {
+                ContextUsageBar(
+                    usage: chatVM.contextUsage,
+                    limit: chatVM.contextLimit,
+                    percentage: chatVM.contextPercentage
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             // Messages area
             ScrollViewReader { proxy in
@@ -70,8 +73,8 @@ struct ChatView: View {
                             .id("error")
                         }
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 20)
+                    .padding(.horizontal, 48)
+                    .padding(.vertical, 24)
                 }
                 .onChange(of: chatVM.streamingText) {
                     withAnimation(.easeOut(duration: 0.15)) {

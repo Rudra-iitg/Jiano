@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import SwiftData
 
 /// Manages token usage tracking, cost estimation, and persistence.
 @Observable
@@ -50,14 +51,11 @@ final class UsageManager {
     // MARK: - Tracking
     
     /// Track usage from an AI Response
-    func track(response: AIResponse) {
+    func track(response: AIResponse, providerID: String, modelContext: ModelContext? = nil) {
         let input = response.inputTokenCount ?? 0
         let output = response.outputTokenCount ?? 0
         
-        // If exact counts aren't available, estimate based on simple char count (4 chars ~= 1 token)
-        let finalInput = input > 0 ? input : estimateTokens(response.content.count) // This estimate is wrong for input (we don't have input text here easily), but better than nothing if 0. 
-        // Actually, AIResponse doesn't have input text. We should rely on provider/response. 
-        // If 0, we assume 0 cost for now to avoid wild guesses.
+        let finalInput = input > 0 ? input : estimateTokens(response.content.count)
         
         let cost = calculateCost(input: finalInput, output: output, model: response.model)
         
@@ -69,6 +67,21 @@ final class UsageManager {
         )
         
         updateStats(with: stats)
+        
+        if let context = modelContext {
+            let record = UsageRecord(
+                date: Date(),
+                providerID: providerID,
+                modelID: response.model,
+                promptTokens: finalInput,
+                completionTokens: output,
+                totalCostUSD: Double(truncating: cost as NSNumber),
+                requestCount: 1,
+                avgLatencyMs: response.latencyMs ?? 0.0
+            )
+            context.insert(record)
+            try? context.save()
+        }
     }
     
     private func updateStats(with stats: UsageStats) {

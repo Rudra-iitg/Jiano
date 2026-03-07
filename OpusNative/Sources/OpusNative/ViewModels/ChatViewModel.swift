@@ -126,7 +126,7 @@ final class ChatViewModel {
                     outputTokens = response.outputTokenCount
                     
                     // Track usage
-                    diContainer.usageManager.track(response: response)
+                    diContainer.usageManager.track(response: response, providerID: provider.id, modelContext: modelContext)
                     
                     // Update context
                     diContainer.contextManager.updateUsage(messages: conversation.sortedMessages, model: settings.modelName)
@@ -151,7 +151,7 @@ final class ChatViewModel {
                         model: settings.modelName,
                         providerID: provider.id
                     )
-                    diContainer.usageManager.track(response: response)
+                    diContainer.usageManager.track(response: response, providerID: provider.id, modelContext: modelContext)
                 }
 
                 // Save completed assistant message

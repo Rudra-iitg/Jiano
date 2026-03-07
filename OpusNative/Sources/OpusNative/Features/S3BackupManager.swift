@@ -2,60 +2,17 @@ import Foundation
 import CryptoKit
 import SwiftData
 
-// MARK: - Backup Data Models
+// MARK: - Backup Manifest Info
 
-/// Codable model representing a complete backup payload —
-/// conversations, clipboard analyses, file analyses, and screenshot analyses.
-struct BackupPayload: Codable {
-    let timestamp: Date
-    let appVersion: String
-    let conversations: [ConversationBackup]
-    let toolAnalyses: ToolAnalysesBackup
-}
-
-struct ConversationBackup: Codable {
-    let id: String
-    let title: String
+struct BackupManifestFile: Codable, Identifiable {
+    var id: UUID { backupID }
+    let backupID: UUID
     let createdAt: Date
-    let updatedAt: Date
-    let providerID: String
-    let messages: [MessageBackup]
-}
-
-struct MessageBackup: Codable {
-    let id: String
-    let role: String
-    let content: String
-    let timestamp: Date
-    let providerID: String?
-    let tokenCount: Int?
-    let latencyMs: Double?
-}
-
-struct ToolAnalysesBackup: Codable {
-    let clipboard: [ToolAnalysisEntry]
-    let files: [ToolAnalysisEntry]
-    let screenshots: [ToolAnalysisEntry]
-}
-
-/// A single tool analysis entry (clipboard, file, or screenshot result)
-struct ToolAnalysisEntry: Codable, Identifiable {
-    let id: String
-    let type: String          // "clipboard", "file", "screenshot"
-    let title: String
-    let content: String
-    let providerID: String
-    let modelName: String
-    let timestamp: Date
-}
-
-// MARK: - Backup Date Info
-
-struct BackupDateInfo: Identifiable {
-    let id: String
-    let date: String           // "2026-02-15"
-    let displayDate: String    // "Feb 15, 2026"
-    let key: String            // Full S3 key
+    let deviceName: String
+    let appVersion: String
+    let schemaVersion: Int
+    let payloadKey: String
+    let manifest: BackupManifest
 }
 
 // MARK: - S3 Backup Manager
@@ -77,7 +34,7 @@ final class S3BackupManager {
     var errorMessage: String?
     
     var aiManager: AIManager!
-    var availableBackups: [BackupDateInfo] = []
+    var availableBackups: [BackupManifestFile] = []
     var lastBackupDate: Date?
 
     /// Auto-backup settings
@@ -95,17 +52,17 @@ final class S3BackupManager {
     }
 
     private let session = URLSession.shared
-    private let dateFormatter: DateFormatter = {
+    private let s3DateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = TimeZone.current
+        f.dateFormat = "yyyy/MM/dd"
+        f.timeZone = TimeZone(identifier: "UTC")
         return f
     }()
 
-    private let displayDateFormatter: DateFormatter = {
+    private let s3TimeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
+        f.dateFormat = "HH-mm-ss"
+        f.timeZone = TimeZone(identifier: "UTC")
         return f
     }()
 
@@ -118,7 +75,6 @@ final class S3BackupManager {
 
     // MARK: - Manual Backup
 
-    /// Full backup: serialize all data → encrypt → upload to S3 under today's date
     func backup(modelContext: ModelContext) async {
         guard let config = getS3Config() else {
             errorMessage = "S3 credentials not configured. Open Settings → Cloud Backup."
@@ -131,59 +87,57 @@ final class S3BackupManager {
         errorMessage = nil
 
         do {
-            // 1. Serialize conversations from SwiftData
-            progress = 0.1
-            statusMessage = "Reading conversations..."
-
-            let descriptor = FetchDescriptor<Conversation>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
-            let conversations = try modelContext.fetch(descriptor)
-            let conversationBackups = conversations.map { serializeConversation($0) }
-
-            // 2. Gather tool analyses from UserDefaults
-            progress = 0.25
-            statusMessage = "Reading tool analyses..."
-
-            let toolAnalyses = ToolAnalysesBackup(
-                clipboard: loadToolHistory(key: "clipboardAnalysisHistory"),
-                files: loadToolHistory(key: "fileAnalysisHistory"),
-                screenshots: loadToolHistory(key: "screenshotAnalysisHistory")
-            )
-
-            // 3. Build payload
-            progress = 0.35
+            // 1. Serialize all data
+            progress = 0.2
+            statusMessage = "Serializing app data..."
+            let serializer = BackupSerializer()
+            let masterBackup = try await serializer.serialize(context: modelContext)
+            
+            // 2. Encode payload
+            progress = 0.4
             statusMessage = "Building payload..."
-
-            let payload = BackupPayload(
-                timestamp: Date(),
-                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
-                conversations: conversationBackups,
-                toolAnalyses: toolAnalyses
-            )
-
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = .prettyPrinted
-            let jsonData = try encoder.encode(payload)
-
-            // 4. Encrypt
+            let payloadData = try encoder.encode(masterBackup)
+            
+            // 3. Encrypt payload
             progress = 0.5
-            statusMessage = "Encrypting (\(ByteCountFormatter.string(fromByteCount: Int64(jsonData.count), countStyle: .file)))..."
+            statusMessage = "Encrypting (\(ByteCountFormatter.string(fromByteCount: Int64(payloadData.count), countStyle: .file)))..."
+            let encryptedData = try encrypt(data: payloadData)
+            
+            // 4. Generate metadata & keys
+            let dateStr = s3DateFormatter.string(from: masterBackup.createdAt)
+            let timeStr = s3TimeFormatter.string(from: masterBackup.createdAt)
+            let idStr = masterBackup.backupID.uuidString.lowercased()
+            
+            let payloadKey = "opusnative-backups/backups/\(dateStr)/\(timeStr)-\(idStr).enc"
+            let manifestKey = "opusnative-backups/manifests/\(idStr).json"
+            
+            let manifestFile = BackupManifestFile(
+                backupID: masterBackup.backupID,
+                createdAt: masterBackup.createdAt,
+                deviceName: masterBackup.deviceName,
+                appVersion: masterBackup.appVersion,
+                schemaVersion: masterBackup.schemaVersion,
+                payloadKey: payloadKey,
+                manifest: masterBackup.sections.manifest
+            )
+            let manifestData = try encoder.encode(manifestFile)
+            
+            // 5. Upload Encrypted Payload
+            progress = 0.7
+            statusMessage = "Uploading encrypted payload..."
+            try await uploadToS3(data: encryptedData, key: payloadKey, config: config)
+            
+            // 6. Upload Manifest
+            progress = 0.9
+            statusMessage = "Uploading manifest..."
+            try await uploadToS3(data: manifestData, key: manifestKey, config: config)
 
-            let encryptedData = try encrypt(data: jsonData)
-
-            // 5. Upload
-            progress = 0.65
-            statusMessage = "Uploading to S3..."
-
-            let dateKey = dateFormatter.string(from: Date())
-            let s3Key = "opusnative/\(dateKey)/backup.enc"
-            try await uploadToS3(data: encryptedData, key: s3Key, config: config)
-
-            // 6. Done
             progress = 1.0
-            let convCount = conversationBackups.count
-            let toolCount = toolAnalyses.clipboard.count + toolAnalyses.files.count + toolAnalyses.screenshots.count
-            statusMessage = "✓ Backed up \(convCount) conversations, \(toolCount) analyses"
+            let convCount = masterBackup.sections.manifest.conversationCount
+            let totalRecords = convCount + masterBackup.sections.manifest.codeSessionCount
+            statusMessage = "✓ Backed up \(totalRecords) items"
 
             lastBackupDate = Date()
             UserDefaults.standard.set(lastBackupDate, forKey: "lastBackupTimestamp")
@@ -226,8 +180,28 @@ final class S3BackupManager {
         availableBackups = []
 
         do {
-            let dates = try await listS3BackupDates(config: config)
-            availableBackups = dates
+            // First fetch manifest list
+            let manifestKeys = try await listS3ManifestKeys(config: config)
+            
+            // Fetch each manifest concurrently
+            var manifests: [BackupManifestFile] = []
+            try await withThrowingTaskGroup(of: BackupManifestFile?.self) { group in
+                for key in manifestKeys {
+                    group.addTask {
+                        let data = try await self.downloadFromS3(key: key, config: config)
+                        let decoder = JSONDecoder()
+                        decoder.dateDecodingStrategy = .iso8601
+                        return try? decoder.decode(BackupManifestFile.self, from: data)
+                    }
+                }
+                for try await manifest in group {
+                    if let manifest = manifest {
+                        manifests.append(manifest)
+                    }
+                }
+            }
+            
+            availableBackups = manifests.sorted { $0.createdAt > $1.createdAt }
         } catch {
             errorMessage = "Failed to list backups: \(error.localizedDescription)"
         }
@@ -235,171 +209,15 @@ final class S3BackupManager {
         isListingBackups = false
     }
 
-    // MARK: - Restore from S3
+    // MARK: - Legacy methods replacing restore
 
-    /// Download, decrypt, and merge a specific date's backup into local data
+    /// Deprecated, left stub for refactoring BackupRestoreEngine
     func restore(date: String, modelContext: ModelContext) async {
-        guard let config = getS3Config() else {
-            errorMessage = "S3 credentials not configured."
-            return
-        }
-
-        isRestoring = true
-        progress = 0.0
-        statusMessage = "Downloading backup for \(date)..."
-        errorMessage = nil
-
-        do {
-            // 1. Download
-            progress = 0.2
-            let s3Key = "opusnative/\(date)/backup.enc"
-            let encryptedData = try await downloadFromS3(key: s3Key, config: config)
-
-            // 2. Decrypt
-            progress = 0.4
-            statusMessage = "Decrypting..."
-            let jsonData = try decrypt(data: encryptedData)
-
-            // 3. Parse
-            progress = 0.6
-            statusMessage = "Parsing backup..."
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let payload = try decoder.decode(BackupPayload.self, from: jsonData)
-
-            // 4. Merge conversations (skip existing)
-            progress = 0.75
-            statusMessage = "Merging conversations..."
-            let mergeResult = try mergeConversations(payload.conversations, into: modelContext)
-
-            // 5. Merge tool analyses
-            progress = 0.9
-            statusMessage = "Merging tool analyses..."
-            mergeToolAnalyses(payload.toolAnalyses)
-
-            // 6. Done
-            progress = 1.0
-            statusMessage = "✓ Restored: \(mergeResult.added) new conversations, \(mergeResult.skipped) already existed"
-
-        } catch {
-            errorMessage = error.localizedDescription
-            statusMessage = "Restore failed"
-        }
-
-        isRestoring = false
+        errorMessage = "Use BackupRestoreEngine instead"
     }
 
-    // MARK: - Serialization
-
-    private func serializeConversation(_ conversation: Conversation) -> ConversationBackup {
-        let messages = conversation.sortedMessages.map { msg in
-            MessageBackup(
-                id: msg.id.uuidString,
-                role: msg.role,
-                content: msg.content,
-                timestamp: msg.timestamp,
-                providerID: msg.providerID,
-                tokenCount: msg.tokenCount,
-                latencyMs: msg.latencyMs
-            )
-        }
-
-        return ConversationBackup(
-            id: conversation.id.uuidString,
-            title: conversation.title,
-            createdAt: conversation.createdAt,
-            updatedAt: conversation.updatedAt,
-            providerID: conversation.providerID ?? "",
-            messages: messages
-        )
-    }
-
-    // MARK: - Merge Logic
-
-    private struct MergeResult {
-        let added: Int
-        let skipped: Int
-    }
-
-    private func mergeConversations(_ backups: [ConversationBackup], into modelContext: ModelContext) throws -> MergeResult {
-        // Get existing conversation IDs
-        let descriptor = FetchDescriptor<Conversation>()
-        let existing = try modelContext.fetch(descriptor)
-        let existingIDs = Set(existing.map { $0.id.uuidString })
-
-        var added = 0
-        var skipped = 0
-
-        for backup in backups {
-            if existingIDs.contains(backup.id) {
-                skipped += 1
-                continue
-            }
-
-            // Create new conversation
-            let conversation = Conversation(title: backup.title, providerID: backup.providerID.isEmpty ? nil : backup.providerID)
-            if let uuid = UUID(uuidString: backup.id) {
-                conversation.id = uuid
-            }
-            conversation.createdAt = backup.createdAt
-            conversation.updatedAt = backup.updatedAt
-            modelContext.insert(conversation)
-
-            // Create messages
-            for msgBackup in backup.messages {
-                let message = ChatMessage(
-                    role: msgBackup.role,
-                    content: msgBackup.content,
-                    conversation: conversation,
-                    providerID: msgBackup.providerID,
-                    tokenCount: msgBackup.tokenCount,
-                    latencyMs: msgBackup.latencyMs
-                )
-                if let uuid = UUID(uuidString: msgBackup.id) {
-                    message.id = uuid
-                }
-                message.timestamp = msgBackup.timestamp
-                modelContext.insert(message)
-                conversation.messages.append(message)
-            }
-
-            added += 1
-        }
-
-        try modelContext.save()
-        return MergeResult(added: added, skipped: skipped)
-    }
-
-    // MARK: - Tool Analysis Persistence
-
-    private func loadToolHistory(key: String) -> [ToolAnalysisEntry] {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
-        return (try? JSONDecoder().decode([ToolAnalysisEntry].self, from: data)) ?? []
-    }
-
-    private func mergeToolAnalyses(_ backup: ToolAnalysesBackup) {
-        mergeToolEntries(backup.clipboard, key: "clipboardAnalysisHistory")
-        mergeToolEntries(backup.files, key: "fileAnalysisHistory")
-        mergeToolEntries(backup.screenshots, key: "screenshotAnalysisHistory")
-    }
-
-    private func mergeToolEntries(_ entries: [ToolAnalysisEntry], key: String) {
-        var existing = loadToolHistory(key: key)
-        let existingIDs = Set(existing.map { $0.id })
-
-        for entry in entries {
-            if !existingIDs.contains(entry.id) {
-                existing.append(entry)
-            }
-        }
-
-        if let data = try? JSONEncoder().encode(existing) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
-    }
-
-    /// Save a tool analysis entry (called by ClipboardMonitor, FileAnalyzer, ScreenshotAnalyzer)
-    func saveToolAnalysis(type: String, title: String, content: String, toKey key: String) {
+    /// Save a tool analysis entry (called by legacy UserDefaults methods locally)
+    func saveLegacyToolAnalysis(type: String, title: String, content: String, toKey key: String) {
         let entry = ToolAnalysisEntry(
             id: UUID().uuidString,
             type: type,
@@ -428,7 +246,7 @@ final class S3BackupManager {
 
     // MARK: - AES-256-GCM Encryption
 
-    private func encrypt(data: Data) throws -> Data {
+    func encrypt(data: Data) throws -> Data {
         let key = getOrCreateEncryptionKey()
         let symmetricKey = SymmetricKey(data: key)
         let sealedBox = try AES.GCM.seal(data, using: symmetricKey)
@@ -438,7 +256,7 @@ final class S3BackupManager {
         return combined
     }
 
-    private func decrypt(data: Data) throws -> Data {
+    func decrypt(data: Data) throws -> Data {
         let key = getOrCreateEncryptionKey()
         let symmetricKey = SymmetricKey(data: key)
         let sealedBox = try AES.GCM.SealedBox(combined: data)
@@ -460,14 +278,14 @@ final class S3BackupManager {
 
     // MARK: - S3 Config
 
-    private struct S3Config {
+    struct S3Config {
         let accessKey: String
         let secretKey: String
         let bucket: String
         let region: String
     }
 
-    private func getS3Config() -> S3Config? {
+    func getS3Config() -> S3Config? {
         guard let accessKey = KeychainService.shared.load(key: KeychainService.s3AccessKey),
               let secretKey = KeychainService.shared.load(key: KeychainService.s3SecretKey),
               !accessKey.isEmpty, !secretKey.isEmpty else {
@@ -486,7 +304,7 @@ final class S3BackupManager {
 
     // MARK: - S3 Operations
 
-    private func uploadToS3(data: Data, key: String, config: S3Config) async throws {
+    func uploadToS3(data: Data, key: String, config: S3Config) async throws {
         let endpoint = "https://\(config.bucket).s3.\(config.region).amazonaws.com/\(key)"
         guard let url = URL(string: endpoint) else { throw URLError(.badURL) }
 
@@ -505,7 +323,7 @@ final class S3BackupManager {
         }
     }
 
-    private func downloadFromS3(key: String, config: S3Config) async throws -> Data {
+    func downloadFromS3(key: String, config: S3Config) async throws -> Data {
         let endpoint = "https://\(config.bucket).s3.\(config.region).amazonaws.com/\(key)"
         guard let url = URL(string: endpoint) else { throw URLError(.badURL) }
 
@@ -524,9 +342,9 @@ final class S3BackupManager {
         return data
     }
 
-    private func listS3BackupDates(config: S3Config) async throws -> [BackupDateInfo] {
-        let prefix = "opusnative/"
-        let queryString = "delimiter=%2F&list-type=2&prefix=\(prefix)"
+    private func listS3ManifestKeys(config: S3Config) async throws -> [String] {
+        let prefix = "opusnative-backups/manifests/"
+        let queryString = "list-type=2&prefix=\(prefix)"
         let endpoint = "https://\(config.bucket).s3.\(config.region).amazonaws.com/?\(queryString)"
         guard let url = URL(string: endpoint) else { throw URLError(.badURL) }
 
@@ -542,44 +360,39 @@ final class S3BackupManager {
             throw NSError(domain: "S3", code: code, userInfo: [NSLocalizedDescriptionKey: "Failed to list S3 objects (HTTP \(code))"])
         }
 
-        // Parse XML response to find CommonPrefixes (date folders)
         let xml = String(data: data, encoding: .utf8) ?? ""
-        return parseBackupDates(from: xml)
+        return parseS3ManifestKeys(from: xml)
     }
-
-    private func parseBackupDates(from xml: String) -> [BackupDateInfo] {
-        var dates: [BackupDateInfo] = []
-
-        // Extract <Prefix> values from <CommonPrefixes> blocks
+    
+    private func parseS3ManifestKeys(from xml: String) -> [String] {
+        var keys: [String] = []
         var remaining = xml
-        while let prefixStart = remaining.range(of: "<Prefix>"),
-              let prefixEnd = remaining.range(of: "</Prefix>") {
-            let prefix = String(remaining[prefixStart.upperBound..<prefixEnd.lowerBound])
-            remaining = String(remaining[prefixEnd.upperBound...])
-
-            // Extract date from "opusnative/2026-02-15/"
-            let parts = prefix.split(separator: "/")
-            if parts.count >= 2 {
-                let dateStr = String(parts[1])
-
-                // Convert to display date
-                let displayDate: String
-                if let date = dateFormatter.date(from: dateStr) {
-                    displayDate = displayDateFormatter.string(from: date)
-                } else {
-                    displayDate = dateStr
-                }
-
-                dates.append(BackupDateInfo(
-                    id: dateStr,
-                    date: dateStr,
-                    displayDate: displayDate,
-                    key: "opusnative/\(dateStr)/backup.enc"
-                ))
+        while let keyStart = remaining.range(of: "<Key>"),
+              let keyEnd = remaining.range(of: "</Key>") {
+            let key = String(remaining[keyStart.upperBound..<keyEnd.lowerBound])
+            if key.hasSuffix(".json") {
+                keys.append(key)
             }
+            remaining = String(remaining[keyEnd.upperBound...])
         }
+        return keys
+    }
+    
+    func deleteFromS3(key: String, config: S3Config) async throws {
+        let endpoint = "https://\(config.bucket).s3.\(config.region).amazonaws.com/\(key)"
+        guard let url = URL(string: endpoint) else { throw URLError(.badURL) }
 
-        return dates.sorted { $0.date > $1.date } // newest first
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+
+        try signS3Request(request: &request, body: Data(), config: config, httpMethod: "DELETE", path: "/\(key)", queryString: "")
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw NSError(domain: "S3", code: code, userInfo: [NSLocalizedDescriptionKey: "S3 delete failed (HTTP \(code))"])
+        }
     }
 
     // MARK: - SigV4 Signing

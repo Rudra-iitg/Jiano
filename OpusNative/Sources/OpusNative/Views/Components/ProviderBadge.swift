@@ -38,8 +38,8 @@ struct ProviderBadge: View {
             .padding(.horizontal, compact ? 4 : 8)
             .padding(.vertical, 2)
             .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(color.opacity(0.8))
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(color.opacity(0.75))
             )
     }
 }

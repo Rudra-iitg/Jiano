@@ -11,27 +11,37 @@ struct ChatInputBarView: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
-            TextEditor(text: $chatVM.currentMessage)
-                .font(.body)
-                .foregroundStyle(.white)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 36, maxHeight: 120)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white.opacity(0.06))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                )
-                .focused($isInputFocused)
-                .onSubmit {
-                    if !NSEvent.modifierFlags.contains(.shift) {
-                        chatVM.sendMessage(modelContext: modelContext)
-                    }
+            ZStack(alignment: .topLeading) {
+                if chatVM.currentMessage.isEmpty {
+                    Text("Message OpusNative...")
+                        .font(.body)
+                        .foregroundStyle(.white.opacity(0.25))
+                        .padding(.top, 8)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
                 }
+                TextEditor(text: $chatVM.currentMessage)
+                    .font(.body)
+                    .foregroundStyle(.white)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 36, maxHeight: 120)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .focused($isInputFocused)
+                    .onSubmit {
+                        if !NSEvent.modifierFlags.contains(.shift) {
+                            chatVM.sendMessage(modelContext: modelContext)
+                        }
+                    }
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.white.opacity(isInputFocused ? 0.18 : 0.1), lineWidth: 1)
+            )
 
             Button {
                 chatVM.sendMessage(modelContext: modelContext)
@@ -53,7 +63,7 @@ struct ChatInputBarView: View {
             .disabled(chatVM.currentMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chatVM.isStreaming)
             .keyboardShortcut(.return, modifiers: .command)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 28)
         .padding(.vertical, 14)
         .background(
             Group {

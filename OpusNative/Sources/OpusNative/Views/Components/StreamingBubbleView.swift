@@ -26,17 +26,17 @@ struct StreamingBubbleView: View {
                 Text(text)
                     .textSelection(.enabled)
                     .foregroundStyle(.white.opacity(0.9))
-                    .padding(14)
+                    .padding(16)
                     .background(
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: 20)
                             .fill(Color.white.opacity(0.06))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 16)
+                                RoundedRectangle(cornerRadius: 20)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
                             )
                     )
             }
-            Spacer(minLength: 80)
+            Spacer(minLength: 120)
         }
     }
 }

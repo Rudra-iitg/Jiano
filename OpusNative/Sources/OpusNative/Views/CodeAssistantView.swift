@@ -5,6 +5,7 @@ import MarkdownUI
 struct CodeAssistantView: View {
     @Bindable var assistant: CodeAssistant
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(AppDIContainer.self) private var diContainer
     
     private var themeManager: ThemeManager { diContainer.themeManager }
@@ -138,7 +139,7 @@ struct CodeAssistantView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140))], spacing: 10) {
                         ForEach(CodeAssistant.CodeAction.allCases) { action in
                             Button {
-                                Task { await assistant.execute(action: action) }
+                                Task { await assistant.execute(action: action, modelContext: modelContext) }
                             } label: {
                                 HStack(spacing: 8) {
                                     Image(systemName: action.icon)

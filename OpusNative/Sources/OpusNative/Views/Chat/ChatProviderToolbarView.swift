@@ -4,6 +4,8 @@ struct ChatProviderToolbarView: View {
     @Bindable var aiManager: AIManager
     let performanceManager: PerformanceManager
 
+    @State private var showingHuggingFacePicker = false
+
     var body: some View {
         HStack(spacing: 16) {
             // Provider selector
@@ -51,6 +53,28 @@ struct ChatProviderToolbarView: View {
                     } icon: {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
+                    }
+                } else if aiManager.activeProviderID == "huggingface" {
+                    Button {
+                        showingHuggingFacePicker = true
+                    } label: {
+                        HStack {
+                            Text(aiManager.settings.modelName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: 280)
+                    .sheet(isPresented: $showingHuggingFacePicker) {
+                        HuggingFaceModelPickerView(
+                            apiKey: KeychainService.shared.load(key: KeychainService.huggingfaceToken) ?? ""
+                        ) { selectedId in
+                            aiManager.settings.modelName = selectedId
+                        }
                     }
                 } else {
                     Picker("Model", selection: Binding(
@@ -132,8 +156,8 @@ struct ChatProviderToolbarView: View {
                     .frame(width: 8, height: 8)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
         .background(
             Group {
                 if performanceManager.reduceTranslucency {

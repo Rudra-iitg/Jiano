@@ -4,6 +4,7 @@ import SwiftUI
 struct CompareView: View {
     @Bindable var viewModel: CompareViewModel
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(AppDIContainer.self) private var diContainer
 
     private var themeManager: ThemeManager { diContainer.themeManager }
@@ -22,6 +23,9 @@ struct CompareView: View {
         VStack(spacing: 0) {
             // Header
             CompareHeaderView(viewModel: viewModel, accentColor: accentColor)
+                .onAppear {
+                    viewModel.modelContext = modelContext
+                }
 
             Divider().overlay(Color.white.opacity(0.06))
 
@@ -42,7 +46,7 @@ struct CompareView: View {
                         resultCards
                     }
                 }
-                .padding(24)
+                .padding(28)
             }
         }
         .background(

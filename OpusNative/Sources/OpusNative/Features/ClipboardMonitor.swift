@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftData
 
 // MARK: - Clipboard Monitor
 
@@ -47,7 +48,7 @@ final class ClipboardMonitor {
     }
 
     /// Analyze clipboard content using the active provider
-    func analyzeClipboard() async {
+    func analyzeClipboard(modelContext: SwiftData.ModelContext? = nil) async {
         readClipboard()
 
         guard contentType != .empty else {
@@ -97,13 +98,18 @@ final class ClipboardMonitor {
             let response = try await provider.sendMessage(prompt, conversation: [], settings: settings)
             analysisResult = response.content
 
-            // Persist for S3 backup
-            diContainer.s3BackupManager.saveToolAnalysis(
-                type: "clipboard",
-                title: contentType.rawValue,
-                content: response.content,
-                toKey: "clipboardAnalysisHistory"
-            )
+            // Persist as ToolAnalysis SwiftData model
+            if let context = modelContext {
+                let analysis = ToolAnalysis(
+                    type: "clipboard",
+                    title: contentType.rawValue,
+                    content: response.content,
+                    providerID: provider.id,
+                    modelName: settings.modelName
+                )
+                context.insert(analysis)
+                try? context.save()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -18,7 +18,7 @@ struct MessageBubbleView: View {
     var body: some View {
         HStack(alignment: .top) {
             if message.isUser {
-                Spacer(minLength: 80)
+                Spacer(minLength: 120)
             }
 
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 6) {
@@ -111,7 +111,7 @@ struct MessageBubbleView: View {
             }
 
             if !message.isUser {
-                Spacer(minLength: 80)
+                Spacer(minLength: 120)
             }
         }
         .onHover { hovering in
@@ -139,9 +139,9 @@ struct MessageBubbleView: View {
         Text(message.content)
             .textSelection(.enabled)
             .foregroundStyle(.white)
-            .padding(14)
+            .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: 20)
                     .fill(
                         LinearGradient(
                             colors: [accentColor, accentColor.opacity(0.85)],
@@ -149,7 +149,7 @@ struct MessageBubbleView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .shadow(color: accentColor.opacity(0.25), radius: 8, y: 4)
+                    .shadow(color: accentColor.opacity(0.2), radius: 10, y: 4)
             )
     }
 
@@ -183,12 +183,12 @@ struct MessageBubbleView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(Color.white.opacity(0.05))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18)
+                    RoundedRectangle(cornerRadius: 20)
                         .strokeBorder(
                             LinearGradient(
                                 colors: [Color.white.opacity(0.1), Color.white.opacity(0.03)],
@@ -198,7 +198,7 @@ struct MessageBubbleView: View {
                             lineWidth: 0.5
                         )
                 )
-                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
         )
     }
 

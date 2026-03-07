@@ -16,9 +16,9 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $selectedNav) {
-            // Navigation sections
-            Section("Workstation") {
-                ForEach(NavigationItem.allCases) { item in
+            // Primary
+            Section {
+                ForEach([NavigationItem.chat, .compare]) { item in
                     NavigationLink(value: item) {
                         Label(item.rawValue, systemImage: item.icon)
                             .font(.callout.weight(.medium))
@@ -26,8 +26,36 @@ struct SidebarView: View {
                 }
             }
 
-            // Conversation history (only shown when in Chat)
-            Section("Recent Chats") {
+            // Developer tools
+            Section("Tools") {
+                ForEach([NavigationItem.codeAssistant, .promptLibrary, .tools]) { item in
+                    NavigationLink(value: item) {
+                        Label(item.rawValue, systemImage: item.icon)
+                            .font(.callout.weight(.medium))
+                    }
+                }
+            }
+
+            // Analytics & monitoring
+            Section("Insights") {
+                ForEach([NavigationItem.embeddings, .usage, .observability]) { item in
+                    NavigationLink(value: item) {
+                        Label(item.rawValue, systemImage: item.icon)
+                            .font(.callout.weight(.medium))
+                    }
+                }
+            }
+
+            Section {
+                NavigationLink(value: NavigationItem.settings) {
+                    Label(NavigationItem.settings.rawValue, systemImage: NavigationItem.settings.icon)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+
+            // Conversation history
+            Section("History") {
                 ForEach(conversations) { conversation in
                     Button {
                         selectedNav = .chat
@@ -52,7 +80,7 @@ struct SidebarView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.white.opacity(0.35))
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 6)
                     }
                     .buttonStyle(.plain)
                     .contextMenu {

@@ -8,6 +8,7 @@ struct ToolsView: View {
     @State private var selectedTool: ToolType = .files
     
     @Environment(AppDIContainer.self) private var environmentDIContainer
+    @Environment(\.modelContext) private var modelContext
     private var diContainer: AppDIContainer { environmentDIContainer }
     
     init(diContainer: AppDIContainer) {
@@ -102,7 +103,7 @@ struct ToolsView: View {
                     screenshotContent
                 }
             }
-            .padding(24)
+            .padding(28)
         }
         .background(
             ZStack {
@@ -156,8 +157,8 @@ struct ToolsView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 18)
     }
 
     // MARK: - File Analyzer
@@ -167,7 +168,7 @@ struct ToolsView: View {
             Button {
                 if let file = fileAnalyzer.pickFile() {
                     Task {
-                        await fileAnalyzer.analyzeFile(content: file.content, fileName: file.name, isImage: file.isImage)
+                        await fileAnalyzer.analyzeFile(content: file.content, fileName: file.name, isImage: file.isImage, modelContext: modelContext)
                     }
                 }
             } label: {
@@ -228,7 +229,7 @@ struct ToolsView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    Task { await clipboardMonitor.analyzeClipboard() }
+                    Task { await clipboardMonitor.analyzeClipboard(modelContext: modelContext) }
                 } label: {
                     Label("Analyze", systemImage: "brain")
                         .font(.callout.weight(.semibold))
@@ -336,7 +337,7 @@ struct ToolsView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    Task { await screenshotAnalyzer.analyzeScreenshot() }
+                    Task { await screenshotAnalyzer.analyzeScreenshot(modelContext: modelContext) }
                 } label: {
                     Label("Analyze", systemImage: "brain")
                         .font(.callout.weight(.semibold))
