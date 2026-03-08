@@ -10,9 +10,38 @@ struct BackupManifestFile: Codable, Identifiable {
     let createdAt: Date
     let deviceName: String
     let appVersion: String
-    let schemaVersion: Int
+    var schemaVersion: Int = 1
     let payloadKey: String
     let manifest: BackupManifest
+    
+    enum CodingKeys: String, CodingKey {
+        case backupID, createdAt, deviceName, appVersion, schemaVersion, payloadKey, manifest
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        backupID = try container.decodeIfPresent(UUID.self, forKey: .backupID) ?? UUID()
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        deviceName = try container.decodeIfPresent(String.self, forKey: .deviceName) ?? "Unknown Device"
+        appVersion = try container.decodeIfPresent(String.self, forKey: .appVersion) ?? "1.0"
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        payloadKey = try container.decodeIfPresent(String.self, forKey: .payloadKey) ?? ""
+        manifest = try container.decodeIfPresent(BackupManifest.self, forKey: .manifest) ?? BackupManifest(
+            conversationCount: 0, messageCount: 0, comparisonCount: 0, codeSessionCount: 0,
+            embeddingCount: 0, toolAnalysisCount: 0, usageRecordCount: 0, totalSizeBytes: 0,
+            providersIncluded: [], dateRange: DateRange(from: Date(), to: Date())
+        )
+    }
+    
+    init(backupID: UUID, createdAt: Date, deviceName: String, appVersion: String, schemaVersion: Int, payloadKey: String, manifest: BackupManifest) {
+        self.backupID = backupID
+        self.createdAt = createdAt
+        self.deviceName = deviceName
+        self.appVersion = appVersion
+        self.schemaVersion = schemaVersion
+        self.payloadKey = payloadKey
+        self.manifest = manifest
+    }
 }
 
 // MARK: - S3 Backup Manager
@@ -191,7 +220,12 @@ final class S3BackupManager {
                         let data = try await self.downloadFromS3(key: key, config: config)
                         let decoder = JSONDecoder()
                         decoder.dateDecodingStrategy = .iso8601
-                        return try? decoder.decode(BackupManifestFile.self, from: data)
+                        do {
+                            return try decoder.decode(BackupManifestFile.self, from: data)
+                        } catch {
+                            print("S3 Backup Decode Error for \(key): \(error)")
+                            return nil
+                        }
                     }
                 }
                 for try await manifest in group {

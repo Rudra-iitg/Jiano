@@ -30,101 +30,137 @@ struct ObservabilityDashboardView: View {
                 }
                 .padding(.bottom)
                 
-                // Metrics
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading) {
-                        Text("Average Latency (ms)")
+                if observability.apiLatencySamples.isEmpty && observability.errorCounts.isEmpty && observability.logs.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "checkmark.shield")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.green)
+                        Text("All Systems Healthy")
+                            .font(.title2.bold())
+                        Text("No errors or latency recordings yet.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 40)
+                    Spacer()
+                } else {
+                    // Metrics
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading) {
+                            Text("Average Latency (ms)")
+                                .font(.headline)
+                            
+                            if observability.apiLatencySamples.isEmpty {
+                                Text("No latency data")
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, maxHeight: 150)
+                            } else {
+                                Chart {
+                                    ForEach(observability.apiLatencySamples.sorted(by: { $0.key < $1.key }), id: \.key) { provider, samples in
+                                        let avg = samples.reduce(0, +) / Double(samples.count)
+                                        BarMark(
+                                            x: .value("Provider", provider),
+                                            y: .value("Latency", avg)
+                                        )
+                                        .foregroundStyle(by: .value("Provider", provider))
+                                    }
+                                }
+                                .frame(height: 150)
+                            }
+                        }
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.05)))
+                        
+                        VStack(alignment: .leading) {
+                            Text("Error Counts")
+                                .font(.headline)
+                            
+                            if observability.errorCounts.isEmpty {
+                                Text("No errors")
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, maxHeight: 150)
+                            } else {
+                                List {
+                                    ForEach(observability.errorCounts.sorted(by: { $0.value > $1.value }), id: \.key) { provider, count in
+                                        HStack {
+                                            Text(provider)
+                                            Spacer()
+                                            Text("\(count)")
+                                                .foregroundStyle(.red)
+                                                .bold()
+                                        }
+                                    }
+                                }
+                                .listStyle(.plain)
+                                .frame(height: 150)
+                            }
+                        }
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.05)))
+                    }
+                    
+                    // Logs
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Live Logs")
                             .font(.headline)
                         
-                        Chart {
-                            ForEach(observability.apiLatencySamples.sorted(by: { $0.key < $1.key }), id: \.key) { provider, samples in
-                                let avg = samples.reduce(0, +) / Double(samples.count)
-                                BarMark(
-                                    x: .value("Provider", provider),
-                                    y: .value("Latency", avg)
-                                )
-                                .foregroundStyle(by: .value("Provider", provider))
+                        HStack {
+                            TextField("Search logs...", text: $searchText)
+                                .textFieldStyle(.roundedBorder)
+                            
+                            Picker("Level", selection: $selectedLevel) {
+                                Text("All").tag(Optional<LogLevel>.none)
+                                Text("Debug").tag(Optional(LogLevel.debug))
+                                Text("Info").tag(Optional(LogLevel.info))
+                                Text("Warning").tag(Optional(LogLevel.warning))
+                                Text("Error").tag(Optional(LogLevel.error))
                             }
+                            .frame(width: 120)
                         }
-                        .frame(height: 150)
-                    }
-                    .padding()
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.05)))
-                    
-                    VStack(alignment: .leading) {
-                        Text("Error Counts")
-                            .font(.headline)
                         
-                        List {
-                            ForEach(observability.errorCounts.sorted(by: { $0.value > $1.value }), id: \.key) { provider, count in
-                                HStack {
-                                    Text(provider)
-                                    Spacer()
-                                    Text("\(count)")
-                                        .foregroundStyle(.red)
-                                        .bold()
+                        if filteredLogs.isEmpty {
+                            Text("No logs match the criteria")
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .frame(height: 300)
+                                .background(Color.black.opacity(0.2))
+                                .cornerRadius(8)
+                        } else {
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 4) {
+                                    ForEach(filteredLogs) { log in
+                                        HStack(alignment: .top) {
+                                            Image(systemName: log.level.icon)
+                                                .foregroundStyle(logColor(log.level))
+                                                .frame(width: 20)
+                                            
+                                            Text("[\(log.subsystem)]")
+                                                .font(.caption.bold())
+                                                .foregroundStyle(.secondary)
+                                                .frame(width: 80, alignment: .leading)
+                                            
+                                            Text(log.message)
+                                                .textSelection(.enabled)
+                                            
+                                            Spacer()
+                                            
+                                            Text(log.timestamp.formatted(date: .omitted, time: .standard))
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .font(.system(.body, design: .monospaced))
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8)
+                                        .background(hoverColor(log.level).opacity(0.1))
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    }
                                 }
                             }
-                        }
-                        .listStyle(.plain)
-                        .frame(height: 150)
-                    }
-                    .padding()
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.05)))
-                }
-                
-                // Logs
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Live Logs")
-                        .font(.headline)
-                    
-                    HStack {
-                        TextField("Search logs...", text: $searchText)
-                            .textFieldStyle(.roundedBorder)
-                        
-                        Picker("Level", selection: $selectedLevel) {
-                            Text("All").tag(Optional<LogLevel>.none)
-                            Text("Debug").tag(Optional(LogLevel.debug))
-                            Text("Info").tag(Optional(LogLevel.info))
-                            Text("Warning").tag(Optional(LogLevel.warning))
-                            Text("Error").tag(Optional(LogLevel.error))
-                        }
-                        .frame(width: 120)
-                    }
-                    
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 4) {
-                            ForEach(filteredLogs) { log in
-                                HStack(alignment: .top) {
-                                    Image(systemName: log.level.icon)
-                                        .foregroundStyle(logColor(log.level))
-                                        .frame(width: 20)
-                                    
-                                    Text("[\(log.subsystem)]")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 80, alignment: .leading)
-                                    
-                                    Text(log.message)
-                                        .textSelection(.enabled)
-                                    
-                                    Spacer()
-                                    
-                                    Text(log.timestamp.formatted(date: .omitted, time: .standard))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .font(.system(.body, design: .monospaced))
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 8)
-                                .background(hoverColor(log.level).opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                            }
+                            .frame(height: 300)
+                            .background(Color.black.opacity(0.2))
+                            .cornerRadius(8)
                         }
                     }
-                    .frame(height: 300)
-                    .background(Color.black.opacity(0.2))
-                    .cornerRadius(8)
                 }
             }
             .padding(32)

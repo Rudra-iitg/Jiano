@@ -18,6 +18,18 @@ struct BackupBrowserView: View {
                         Spacer()
                     }
                     .padding()
+                } else if let error = s3Manager.errorMessage {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Error fetching backups")
+                                .font(.headline)
+                                .foregroundColor(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
                 } else if s3Manager.availableBackups.isEmpty {
                     Section {
                         Text("No backups found.")

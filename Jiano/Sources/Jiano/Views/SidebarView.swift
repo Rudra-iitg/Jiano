@@ -50,7 +50,6 @@ struct SidebarView: View {
                 NavigationLink(value: NavigationItem.settings) {
                     Label(NavigationItem.settings.rawValue, systemImage: NavigationItem.settings.icon)
                         .font(.callout.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.6))
                 }
             }
 
