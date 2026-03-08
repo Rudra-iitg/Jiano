@@ -378,9 +378,14 @@ final class S3BackupManager {
 
     private func listS3ManifestKeys(config: S3Config) async throws -> [String] {
         let prefix = "opusnative-backups/manifests/"
+        
         // AWS SigV4 requires exact RFC 3986 encoding for query parameters.
-        // Specifically, '/' must be encoded as '%2F' in the canonical query string.
-        let encodedPrefix = prefix.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        // Allowed characters: a-z, A-Z, 0-9, '-', '_', '.', '~'
+        // Everything else (like '/') must be percent encoded.
+        var allowedCharacters = CharacterSet.alphanumerics
+        allowedCharacters.insert(charactersIn: "-_.~")
+        
+        let encodedPrefix = prefix.addingPercentEncoding(withAllowedCharacters: allowedCharacters)!
         
         let path = "/"
         let queryString = "list-type=2&prefix=\(encodedPrefix)"
