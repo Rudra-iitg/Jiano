@@ -4,6 +4,7 @@ import SwiftData
 struct EmbeddingWorkspaceView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: EmbeddingWorkspaceViewModel
+    @Namespace private var tabNamespace
     
     let diContainer: AppDIContainer
     
@@ -12,40 +13,48 @@ struct EmbeddingWorkspaceView: View {
         self._viewModel = State(initialValue: EmbeddingWorkspaceViewModel(diContainer: diContainer))
     }
     
+    // Theme Colors
+    private let primaryBG = Color(red: 28/255, green: 28/255, blue: 30/255)
+    private let secondaryBG = Color(red: 44/255, green: 44/255, blue: 46/255)
+    private let accentBlue = Color(red: 59/255, green: 130/255, blue: 246/255)
+    private let textSecondary = Color(red: 142/255, green: 142/255, blue: 147/255)
+    private let borderSubtle = Color.white.opacity(0.08)
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // Top Toolbar
-            workspaceToolbar
-                .padding()
-                .background(.ultraThinMaterial)
-                .border(width: 1, edges: [.bottom], color: Color(nsColor: .separatorColor))
-            
-            // Main Content Area
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    // Left Input Pane
-                    inputPane
-                        .frame(width: max(300, geometry.size.width * 0.3))
-                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
-                        .border(width: 1, edges: [.trailing], color: Color(nsColor: .separatorColor))
-                    
-                    // Right Results Pane
-                    resultsPane
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            ZStack {
-                                Color(nsColor: .windowBackgroundColor)
-                                // Standard OpusNative subtle background glow
-                                Circle()
-                                    .fill(Color.indigo.opacity(0.05))
-                                    .frame(width: 600, height: 600)
-                                    .blur(radius: 100)
-                                    .offset(x: 200, y: -200)
-                            }
-                        )
+        HStack(spacing: 0) {
+            // LEFT COLUMN
+            VStack(spacing: 0) {
+                // Tab Bar
+                workspaceToolbar
+                    .padding(.top, 16)
+                    .padding(.bottom, 16)
+                    .padding(.horizontal, 20)
+                
+                Divider()
+                    .background(borderSubtle)
+                
+                // Left Content
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        inputPane
+                    }
+                    .padding(16)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(width: 420)
+            .background(primaryBG)
+            .border(width: 1, edges: [.trailing], color: borderSubtle)
+            
+            // RIGHT COLUMN
+            ZStack {
+                primaryBG.ignoresSafeArea()
+                
+                resultsPane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .preferredColorScheme(.dark)
         .onAppear {
             viewModel.setModelContext(modelContext)
             Task {
@@ -54,82 +63,52 @@ struct EmbeddingWorkspaceView: View {
         }
     }
     
-    // MARK: - Toolbar
+    // MARK: - Tab Bar
     private var workspaceToolbar: some View {
-        HStack {
-            Text("Embedding Workspace")
-                .font(.headline)
-                .padding(.trailing, 16)
-            
-            // Mode Switcher
-            Picker("Mode", selection: $viewModel.currentMode) {
-                ForEach(EmbeddingWorkspaceMode.allCases) { mode in
-                    Label(mode.rawValue, systemImage: mode.icon)
-                        .tag(mode)
+        HStack(spacing: 0) {
+            ForEach(EmbeddingWorkspaceMode.allCases) { mode in
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        viewModel.currentMode = mode
+                    }
+                } label: {
+                    Text(mode.rawValue)
+                        .font(.system(size: 13, weight: viewModel.currentMode == mode ? .medium : .regular))
+                        .foregroundStyle(viewModel.currentMode == mode ? .white : textSecondary)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 16)
+                        .background(
+                            ZStack {
+                                if viewModel.currentMode == mode {
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(secondaryBG)
+                                        .matchedGeometryEffect(id: "TabBackground", in: tabNamespace)
+                                }
+                            }
+                        )
                 }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 400)
-            
-            Spacer()
-            
-            // Global Status
-            if viewModel.isProcessing {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.trailing, 8)
-                Text("Processing...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if viewModel.processingTime > 0 {
-                Label("\(String(format: "%.0f ms", viewModel.processingTime * 1000))", systemImage: "timer")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.trailing, 8)
-                
-                Label("\(viewModel.memoryUsageEstimate)", systemImage: "memorychip")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
             }
         }
+        .padding(4)
+        .background(Color.black.opacity(0.2))
+        .cornerRadius(20)
+        // Center the tab bar
+        .frame(maxWidth: .infinity, alignment: .center)
     }
     
     // MARK: - Input Pane (Left Side)
     @ViewBuilder
     private var inputPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Model Section (Shared)
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Model Configuration", systemImage: "cpu")
-                        .font(.headline)
-                    
-                    Picker("Model", selection: $viewModel.selectedModel) {
-                        ForEach(viewModel.availableModels, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-                .padding(.bottom, 8)
-                
-                Divider()
-                
-                // Mode-specific Inputs
-                switch viewModel.currentMode {
-                case .generate:
-                    generateInputView
-                case .explore:
-                    exploreInputView
-                case .compare:
-                    compareInputView
-                case .lab:
-                    labInputView
-                }
-                
-                Spacer()
-            }
-            .padding(20)
+        switch viewModel.currentMode {
+        case .generate:
+            EmbeddingsGenerateLeftView(viewModel: viewModel)
+        case .explore:
+            EmbeddingsExploreLeftView(viewModel: viewModel)
+        case .compare:
+            EmbeddingsCompareLeftView(viewModel: viewModel)
+        case .lab:
+            EmbeddingsLabLeftView(viewModel: viewModel)
         }
     }
     
@@ -138,100 +117,13 @@ struct EmbeddingWorkspaceView: View {
     private var resultsPane: some View {
         switch viewModel.currentMode {
         case .generate:
-            GenerateResultView(viewModel: viewModel)
+            EmbeddingsGenerateRightView(viewModel: viewModel)
         case .explore:
-            ExploreResultView(viewModel: viewModel)
+            EmbeddingsExploreRightView(viewModel: viewModel)
         case .compare:
-            CompareResultView(viewModel: viewModel)
+            EmbeddingsCompareRightView(viewModel: viewModel)
         case .lab:
-            LabResultView(viewModel: viewModel)
-        }
-    }
-    
-    // MARK: - Specific Input Views
-    private var generateInputView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Text Input", systemImage: "text.alignleft")
-                .font(.headline)
-            TextEditor(text: $viewModel.generateInputText)
-                .font(.custom("Menlo", size: 14))
-                .frame(minHeight: 150)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                .cornerRadius(8)
-            
-            Button("Generate Embedding") {
-                Task { await viewModel.generateSingleEmbedding() }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.generateInputText.isEmpty || viewModel.isProcessing)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-    }
-    
-    private var exploreInputView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Data Source", systemImage: "internaldrive")
-                .font(.headline)
-            Text("Load embeddings from the local database to explore the vector space.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-    
-    private var compareInputView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Source Text", systemImage: "text.bubble")
-                .font(.headline)
-            TextEditor(text: $viewModel.compareSourceText)
-                .font(.custom("Menlo", size: 14))
-                .frame(minHeight: 100)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                .cornerRadius(8)
-            
-            Label("Target Text", systemImage: "text.bubble.fill")
-                .font(.headline)
-            TextEditor(text: $viewModel.compareTargetText)
-                .font(.custom("Menlo", size: 14))
-                .frame(minHeight: 100)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                .cornerRadius(8)
-            
-            Button("Calculate Similarity") {
-                Task { await viewModel.runComparison() }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.compareSourceText.isEmpty || viewModel.compareTargetText.isEmpty || viewModel.isProcessing)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-    }
-    
-    private var labInputView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Batch Input", systemImage: "list.bullet.rectangle")
-                .font(.headline)
-            Text("Enter one sentence per line to cluster them.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            
-            TextEditor(text: $viewModel.labBatchInput)
-                .font(.custom("Menlo", size: 14))
-                .frame(minHeight: 200)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                .cornerRadius(8)
-            
-            Stepper("Clusters: \(viewModel.labClusterCount)", value: $viewModel.labClusterCount, in: 2...20)
-                .padding(.vertical, 8)
-            
-            Button("Run Analysis") {
-                Task { await viewModel.runBatchAnalysis() }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.labBatchInput.isEmpty || viewModel.isProcessing)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            EmbeddingsLabRightView(viewModel: viewModel)
         }
     }
 }

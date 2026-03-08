@@ -25,7 +25,7 @@ enum NavigationItem: String, CaseIterable, Identifiable {
         case .promptLibrary: return "doc.text.magnifyingglass"
         case .embeddings: return "sparkles.rectangle.stack"
         case .usage: return "chart.xyaxis.line"
-        case .observability: return "pulse"
+        case .observability: return "waveform.path.ecg"
         case .tools: return "wrench.and.screwdriver"
         case .settings: return "gearshape"
         }
